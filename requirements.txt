@@ -1,0 +1,5 @@
+grpcio==1.22.0
+grpcio-reflection==1.22.0
+grpcio-tools==1.22.0
+grpcio-opentracing==1.1.4
+google-api-python-client==1.7.10
