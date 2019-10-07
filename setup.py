@@ -14,7 +14,7 @@ setup(
   long_description=long_description,
   author="Sangwon Lee",
   author_email="gamzabaw@gmail.com",
-  version="0.0.1",
+  version="0.0.2",
   license="MIT License",
   zip_safe=False,
   include_package_data=True,
