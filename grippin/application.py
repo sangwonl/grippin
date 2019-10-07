@@ -6,6 +6,10 @@ import grpc
 from . import consts
 
 
+GRPC_SERVICER_SUFFIX = 'Servicer'
+GRPC_SERVICER_ADDER_FMT = 'add_%s_to_server'
+
+
 class Application(object):
     def __init__(
             self,
@@ -35,50 +39,58 @@ class Application(object):
 
         self._grpc_server = server
 
-    @staticmethod
-    def _enumerate_service_adders(pb_rpc_mod):
-        import inspect
-
-        class_names = []
-        func_table = {}
-        for p in dir(pb_rpc_mod):
-            prop = getattr(pb_rpc_mod, p)
-            if not callable(prop):
-                continue
-
-            if inspect.isclass(prop):
-                class_names.append(prop.__name__)
-            elif inspect.isfunction(prop):
-                func_table[prop.__name__] = prop
-
-        adders = []
-        for cn in class_names:
-            fn = f'add_{cn}_to_server'
-            if fn in func_table.keys():
-                adders.append(func_table[fn])
-
-        return adders
-
-    @staticmethod
-    def _iter_modules_of_base_service(svc_classes):
-        svcs = svc_classes if isinstance(svc_classes, list) else [svc_classes]
-        for svc_cls in svcs:
-            for base_cls in svc_cls.__bases__:
-                if 'grippin.service.Service' in str(base_cls):
-                    continue
-                yield sys.modules[base_cls.__module__]
-
     def _register_services(self, server, services):
         for s_cls in services:
             svc = s_cls(self)
             for pb_rpc_mod in self._iter_modules_of_base_service(s_cls):
-                service_adders = self._enumerate_service_adders(pb_rpc_mod)
+                service_adders = self._enumerate_service_adders(pb_rpc_mod, s_cls)
 
                 for adder in service_adders:
                     assert callable(adder)
                     adder(svc, server)
 
         return server
+
+    def _iter_modules_of_base_service(self, svc_classes):
+        svcs = svc_classes if isinstance(svc_classes, list) else [svc_classes]
+        for svc_cls in svcs:
+            assert self._is_grpc_service(svc_cls)
+            grpc_servicer_cls = self._get_grpc_servicer_cls(svc_cls)
+            if grpc_servicer_cls:
+                yield sys.modules[grpc_servicer_cls.__module__]
+
+    def _enumerate_service_adders(self, pb_rpc_mod, svc_cls):
+        import inspect
+
+        class_names = []
+        func_table = {}
+        grpc_servicer_cls = self._get_grpc_servicer_cls(svc_cls)
+        for p in dir(pb_rpc_mod):
+            prop = getattr(pb_rpc_mod, p)
+            if not callable(prop):
+                continue
+
+            if inspect.isclass(prop) and prop is grpc_servicer_cls:
+                class_names.append(prop.__name__)
+            elif inspect.isfunction(prop):
+                func_table[prop.__name__] = prop
+
+        adders = []
+        for cn in class_names:
+            fn = GRPC_SERVICER_ADDER_FMT % cn
+            if fn in func_table.keys():
+                adders.append(func_table[fn])
+
+        return adders
+
+    @staticmethod
+    def _is_grpc_service(svc_cls):
+        return any(GRPC_SERVICER_SUFFIX in str(s) for s in svc_cls.__bases__)
+
+    @staticmethod
+    def _get_grpc_servicer_cls(svc_cls):
+        filtered = [s for s in svc_cls.__bases__ if GRPC_SERVICER_SUFFIX in str(s)]
+        return filtered[0] if filtered else None
 
     @staticmethod
     def _register_interceptors(server, interceptors):
@@ -102,8 +114,8 @@ class Application(object):
                 if not n.endswith('_pb2'):
                     continue
                 pb = getattr(pb_rpc_mod, n)
-                service_names += list(map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.items()))
-        reflection.enable_server_reflection(service_names, server)
+                service_names += map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.iteritems())
+        reflection.enable_server_reflection(set(service_names), server)
 
         return server
 
