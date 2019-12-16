@@ -6,6 +6,7 @@ import grpc
 from . import consts
 
 
+GRPC_STUB_SUFFIX = 'Stub'
 GRPC_SERVICER_SUFFIX = 'Servicer'
 GRPC_SERVICER_ADDER_FMT = 'add_%s_to_server'
 
@@ -22,11 +23,12 @@ class Application(object):
             enable_reflection=False,
             tracer=None):
 
+        self.port = port
+
         self._wakeup_interval = wakeup_interval
         self._wakeup_handler = wakeup_handler
 
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
-        server.add_insecure_port(f'[::]:{port}')
 
         if tracer:
             server = self._enable_trace(server, tracer)
@@ -39,6 +41,8 @@ class Application(object):
 
         self._grpc_server = server
 
+        self._grpc_stubs: dict = self._populate_grpc_stubs_from_services(services)
+
     def _register_services(self, server, services):
         for s_cls in services:
             svc = s_cls(self)
@@ -50,6 +54,30 @@ class Application(object):
                     adder(svc, server)
 
         return server
+
+    def _enable_reflection(self, server, services):
+        from grpc_reflection.v1alpha import reflection
+
+        service_names = [reflection.SERVICE_NAME]
+        for pb_rpc_mod in self._iter_modules_of_base_service(services):
+            for n in dir(pb_rpc_mod):
+                if not n.endswith('_pb2'):
+                    continue
+                pb = getattr(pb_rpc_mod, n)
+                service_names += map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.iteritems())
+        reflection.enable_server_reflection(set(service_names), server)
+
+        return server
+
+    def _populate_grpc_stubs_from_services(self, services):
+        stubs = {}
+        for s_cls in services:
+            svc = s_cls(self)
+            for pb_rpc_mod in self._iter_modules_of_base_service(s_cls):
+                grpc_servicer_cls = self._get_grpc_servicer_cls(s_cls)
+                stub = self._get_grpc_stub_by_servicer(pb_rpc_mod, grpc_servicer_cls)
+                stubs[s_cls.__name__] = stub
+        return stubs
 
     def _iter_modules_of_base_service(self, svc_classes):
         svcs = svc_classes if isinstance(svc_classes, list) else [svc_classes]
@@ -83,6 +111,20 @@ class Application(object):
 
         return adders
 
+    def _get_grpc_stub_by_servicer(self, pb_rpc_mod, grpc_servicer_cls):
+        import inspect
+
+        stub_name = str(grpc_servicer_cls.__name__).replace(GRPC_SERVICER_SUFFIX, '') + GRPC_STUB_SUFFIX
+
+        stub_class = None
+        for p in dir(pb_rpc_mod):
+            prop = getattr(pb_rpc_mod, p)
+            if inspect.isclass(prop) and prop.__name__ == stub_name:
+                stub_class = prop
+                break
+
+        return stub_class
+
     @staticmethod
     def _is_grpc_service(svc_cls):
         return any(GRPC_SERVICER_SUFFIX in str(s) for s in svc_cls.__bases__)
@@ -105,21 +147,12 @@ class Application(object):
 
         return intercept_server(server, tracer_interceptor)
 
-    def _enable_reflection(self, server, services):
-        from grpc_reflection.v1alpha import reflection
+    def get_grpc_stub(self, svc_cls):
+        return self._grpc_stubs.get(svc_cls.__name__)
 
-        service_names = [reflection.SERVICE_NAME]
-        for pb_rpc_mod in self._iter_modules_of_base_service(services):
-            for n in dir(pb_rpc_mod):
-                if not n.endswith('_pb2'):
-                    continue
-                pb = getattr(pb_rpc_mod, n)
-                service_names += map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.items())
-        reflection.enable_server_reflection(set(service_names), server)
-
-        return server
-
-    def start(self):
+    def start(self, port=None):
+        self.port = port or self._port
+        self._grpc_server.add_insecure_port(f'[::]:{self.port}')
         self._grpc_server.start()
         try:
             while True:
