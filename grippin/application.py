@@ -151,7 +151,7 @@ class Application(object):
         return self._grpc_stubs.get(svc_cls.__name__)
 
     def start(self, port=None):
-        self.port = port or self._port
+        self.port = port or self.port
         self._grpc_server.add_insecure_port(f'[::]:{self.port}')
         self._grpc_server.start()
         try:
