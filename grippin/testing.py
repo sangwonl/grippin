@@ -1,10 +1,17 @@
 import unittest
 import grpc
-
-from multiprocessing import Process
+import threading
 
 
 g_port = 50050
+
+
+def getattr(obj, name):
+    return object.__getattribute__(obj, name)
+
+
+def setattr(obj, name, val):
+    object.__setattr__(obj, name, val)
 
 
 class TestServiceProxy(object):
@@ -12,22 +19,35 @@ class TestServiceProxy(object):
         super().__init__()
 
         channel = grpc.insecure_channel(f'localhost:{app.port}')
-        object.__setattr__(self, 'stub', app.get_grpc_stub(svc_cls)(channel))
+        setattr(self, 'stub', app.get_grpc_stub(svc_cls)(channel))
 
     def __getattribute__(self, name):
-        stub = object.__getattribute__(self, 'stub')
-        return object.__getattribute__(stub, name)
+        stub = getattr(self, 'stub')
+        return getattr(stub, name)
 
 
 class TestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = self.get_app()
-        self.running_server = None
+        self.stopEvent: threading.Event = None
+
+    def _gprc_server_runner(self, app, rand_port):
+        def stopper():
+            if self.stopEvent.is_set():
+                app.stop()
+
+        app.wakeup_interval = 0
+        app.wakeup_handler = stopper
+
+        app.start(rand_port)
 
     def _run_grpc_server_app(self, app, rand_port):
-        self.running_server = Process(target=self.app.start, args=(rand_port,))
-        self.running_server.start()
+        threading.Thread(target=self._gprc_server_runner, args=(self.app, rand_port)).start()
+        self.stopEvent = threading.Event()
+
+    def _stop_grpc_server_app(self):
+        self.stopEvent.set()
 
     def setUp(self):
         super().setUp()
@@ -39,7 +59,8 @@ class TestCase(unittest.TestCase):
 
     def tearDown(self):
         super().tearDown()
-        self.running_server.terminate()
+
+        self._stop_grpc_server_app()
 
     def get_app(self):
         raise NotImplementedError('Method not implemented!')

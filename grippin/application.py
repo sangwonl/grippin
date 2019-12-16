@@ -23,25 +23,65 @@ class Application(object):
             enable_reflection=False,
             tracer=None):
 
-        self.port = port
-
+        self._running = False
+        self._port = port
         self._wakeup_interval = wakeup_interval
         self._wakeup_handler = wakeup_handler
 
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
+        self._grpc_server = self._create_grpc_server(
+            max_workers, enable_reflection, services, interceptors, tracer)
+        self._grpc_stubs: dict = self._populate_grpc_stubs_from_services(services)
 
+
+    @property
+    def port(self):
+        return self._port
+
+    @property
+    def wakeup_interval(self):
+        return self._wakeup_interval
+
+    @wakeup_interval.setter
+    def wakeup_interval(self, i):
+        self._wakeup_interval = i
+
+    @property
+    def wakeup_handler(self):
+        return self._wakeup_handler
+
+    @wakeup_handler.setter
+    def wakeup_handler(self, h):
+        self._wakeup_handler = h
+
+    def get_grpc_stub(self, svc_cls):
+        return self._grpc_stubs.get(svc_cls.__name__)
+
+    def start(self, port=None):
+        self._port = port or self.port
+        self._grpc_server.add_insecure_port(f'[::]:{self.port}')
+        self._grpc_server.start()
+        self._running = True
+        try:
+            while self._running:
+                if self._wakeup_handler and callable(self._wakeup_handler):
+                    self._wakeup_handler()
+                time.sleep(self._wakeup_interval)
+        except KeyboardInterrupt:
+            self._grpc_server.stop(0)
+
+    def stop(self):
+        self._grpc_server.stop(0)
+        self._running = False
+
+    def _create_grpc_server(self, max_workers, enable_reflection, services, interceptors, tracer):
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
         if tracer:
             server = self._enable_trace(server, tracer)
-
         if enable_reflection:
             server = self._enable_reflection(server, services)
-
         server = self._register_services(server, services)
         server = self._register_interceptors(server, interceptors)
-
-        self._grpc_server = server
-
-        self._grpc_stubs: dict = self._populate_grpc_stubs_from_services(services)
+        return server
 
     def _register_services(self, server, services):
         for s_cls in services:
@@ -146,18 +186,3 @@ class Application(object):
         self.tracer = tracer
 
         return intercept_server(server, tracer_interceptor)
-
-    def get_grpc_stub(self, svc_cls):
-        return self._grpc_stubs.get(svc_cls.__name__)
-
-    def start(self, port=None):
-        self.port = port or self.port
-        self._grpc_server.add_insecure_port(f'[::]:{self.port}')
-        self._grpc_server.start()
-        try:
-            while True:
-                if self._wakeup_handler and callable(self._wakeup_handler):
-                    self._wakeup_handler()
-                time.sleep(self._wakeup_interval)
-        except KeyboardInterrupt:
-            self._grpc_server.stop(0)
