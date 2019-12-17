@@ -1,6 +1,7 @@
-import unittest
-import grpc
+import time
 import threading
+import grpc
+import unittest
 
 
 g_port = 50050
@@ -45,6 +46,8 @@ class TestCase(unittest.TestCase):
     def _run_grpc_server_app(self, app, rand_port):
         threading.Thread(target=self._gprc_server_runner, args=(self.app, rand_port)).start()
         self.stopEvent = threading.Event()
+        while not app.is_running:
+            time.sleep(0)
 
     def _stop_grpc_server_app(self):
         self.stopEvent.set()
@@ -65,5 +68,5 @@ class TestCase(unittest.TestCase):
     def get_app(self):
         raise NotImplementedError('Method not implemented!')
 
-    def service_proxy(self, svc_class):
-        return TestServiceProxy(self.app, svc_class)
+    def service_proxy(self, svc_cls):
+        return TestServiceProxy(self.app, svc_cls)

@@ -56,6 +56,10 @@ class Application(object):
     def get_grpc_stub(self, svc_cls):
         return self._grpc_stubs.get(svc_cls.__name__)
 
+    @property
+    def is_running(self):
+        return self._running
+
     def start(self, port=None):
         self._port = port or self.port
         self._grpc_server.add_insecure_port(f'[::]:{self.port}')
