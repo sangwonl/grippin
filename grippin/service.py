@@ -9,4 +9,4 @@ class Service(object):
 
     @property
     def tracer(self):
-        return self.get_application().tracer
+        return self.application.tracer
