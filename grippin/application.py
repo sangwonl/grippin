@@ -25,6 +25,7 @@ class Application(object):
 
         self._running = False
         self._port = port
+        self._tracer = tracer
         self._wakeup_interval = wakeup_interval
         self._wakeup_handler = wakeup_handler
 
@@ -59,6 +60,10 @@ class Application(object):
     @property
     def is_running(self):
         return self._running
+
+    @property
+    def tracer(self):
+        return self._tracer
 
     def start(self, port=None):
         self._port = port or self.port
@@ -187,6 +192,4 @@ class Application(object):
         from grpc_opentracing.grpcext import intercept_server
 
         tracer_interceptor = open_tracing_server_interceptor(tracer)
-        self.tracer = tracer
-
         return intercept_server(server, tracer_interceptor)
