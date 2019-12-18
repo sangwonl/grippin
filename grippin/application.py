@@ -11,6 +11,14 @@ GRPC_SERVICER_SUFFIX = 'Servicer'
 GRPC_SERVICER_ADDER_FMT = 'add_%s_to_server'
 
 
+def all_base_classes(cls):
+    for c in cls.__bases__:
+        if c.__name__ != 'object':
+            yield c
+        if c.__bases__:
+            yield from all_base_classes(c)
+
+
 class Application(object):
     def __init__(
             self,
@@ -32,7 +40,6 @@ class Application(object):
         self._grpc_server = self._create_grpc_server(
             max_workers, enable_reflection, services, interceptors, tracer)
         self._grpc_stubs: dict = self._populate_grpc_stubs_from_services(services)
-
 
     @property
     def port(self):
@@ -176,11 +183,11 @@ class Application(object):
 
     @staticmethod
     def _is_grpc_service(svc_cls):
-        return any(GRPC_SERVICER_SUFFIX in str(s) for s in svc_cls.__bases__)
+        return any(GRPC_SERVICER_SUFFIX in str(s) for s in all_base_classes(svc_cls))
 
     @staticmethod
     def _get_grpc_servicer_cls(svc_cls):
-        filtered = [s for s in svc_cls.__bases__ if GRPC_SERVICER_SUFFIX in str(s)]
+        filtered = [s for s in all_base_classes(svc_cls) if GRPC_SERVICER_SUFFIX in str(s)]
         return filtered[0] if filtered else None
 
     @staticmethod
