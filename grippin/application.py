@@ -120,7 +120,7 @@ class Application(object):
                 if not n.endswith('_pb2'):
                     continue
                 pb = getattr(pb_rpc_mod, n)
-                service_names += map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.iteritems())
+                service_names += map(lambda x: x[1].full_name, pb.DESCRIPTOR.services_by_name.items())
         reflection.enable_server_reflection(set(service_names), server)
 
         return server
