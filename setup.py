@@ -14,14 +14,14 @@ setup(
   long_description=long_description,
   author="Sangwon Lee",
   author_email="gamzabaw@gmail.com",
-  version="0.2.5",
+  version="0.3.0",
   license="MIT License",
   zip_safe=False,
   include_package_data=True,
   install_requires=[
-    "grpcio==1.22.0",
-    "grpcio-reflection==1.22.0",
-    "grpcio-tools==1.22.0",
+    "grpcio==1.33.2",
+    "grpcio-reflection==1.33.2",
+    "grpcio-tools==1.33.2",
     "grpcio-opentracing==1.1.4",
     "google-api-python-client==1.7.10"
   ],
