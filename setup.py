@@ -19,7 +19,7 @@ setup(
   zip_safe=False,
   include_package_data=True,
   install_requires=[
-    "grpcio==1.33.2",
+    "grpcio==1.53.0",
     "grpcio-reflection==1.33.2",
     "grpcio-tools==1.33.2",
     "grpcio-opentracing==1.1.4",
